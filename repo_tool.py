@@ -9,7 +9,7 @@ from typing import Iterable
 from pathspec import PathSpec
 
 REPO_PREFIX = "https://github.com/Kindred-Systems/"
-METADATA_FILENAME = "component.json"
+METADATA_FILENAMES = ["component.json", "project.json"]
 
 
 def load_gitignore() -> PathSpec:
@@ -22,14 +22,15 @@ def load_gitignore() -> PathSpec:
 
 
 def find_metadata_files(root: Path, pathspec: PathSpec) -> Iterable[Path]:
-    """Yield component.json files under root honoring .gitignore."""
+    """Yield metadata files under root honoring .gitignore."""
     for dirpath, dirnames, filenames in os.walk(root):
         rel_dir = os.path.relpath(dirpath, root)
         if pathspec.match_file(rel_dir):
             dirnames[:] = []
             continue
-        if METADATA_FILENAME in filenames:
-            yield Path(dirpath) / METADATA_FILENAME
+        for name in METADATA_FILENAMES:
+            if name in filenames:
+                yield Path(dirpath) / name
 
 
 def load_json(path: Path) -> dict:
@@ -93,22 +94,47 @@ def ensure_repo_field(json_path: Path, tier: str, non_interactive: bool) -> None
         git("commit", "-am", f"Add {repo_name} as submodule", cwd=parent)
 
 
-def add_nested_components(parent_path: Path, all_paths: Iterable[Path]) -> None:
+def add_nested_components(
+    parent_path: Path,
+    all_paths: Iterable[Path],
+    project_dirs: set[Path],
+) -> None:
+    """Embed child component metadata into parent projects."""
     parent_json = load_json(parent_path)
     parent_abs = parent_path.resolve()
     parent_dir = parent_abs.parent
+    parent_type = parent_json.get("type", "").lower()
+
+    if parent_type not in {"component", "project"}:
+        return
+
     parent_json["components"] = []
 
     for child_path in all_paths:
         child_abs = child_path.resolve()
+        child_dir = child_abs.parent
         if parent_abs == child_abs:
             continue
-        if parent_abs in child_abs.parents:
+        if parent_dir in child_dir.parents:
+            # Skip children that belong to a nested project between parent and child
+            if any(
+                parent_dir in proj.parents and proj in child_dir.parents
+                for proj in project_dirs
+                if proj != parent_dir
+            ):
+                continue
             child_json = load_json(child_path)
-            if child_json.get("type") == "project":
-                raise ValueError(
-                    f"Invalid dependency: {parent_path} cannot include project {child_path}"
-                )
+            child_type = child_json.get("type", "").lower()
+            if parent_type == "component":
+                if child_type == "project":
+                    raise ValueError(
+                        f"Invalid dependency: {parent_path} cannot include project {child_path}"
+                    )
+                if child_type != "component":
+                    continue
+            elif parent_type == "project" and child_type != "component":
+                continue
+
             rel_path = str(child_abs.relative_to(parent_dir))
             child_json["__file"] = rel_path
             parent_json["components"].append(child_json)
@@ -117,16 +143,29 @@ def add_nested_components(parent_path: Path, all_paths: Iterable[Path]) -> None:
 
 
 def validate_repositories(paths: Iterable[Path]) -> bool:
+    """Validate repo fields and git remotes for metadata files."""
     valid = True
     for path in paths:
         data = load_json(path)
         repo = data.get("repo") or data.get("repository")
+        folder = path.parent
         if not repo:
             print(f"❌ {path} missing repository field")
             valid = False
             continue
         if not repo.startswith(REPO_PREFIX):
-            print(f"❌ {path} repository '{repo}' does not match prefix {REPO_PREFIX}")
+            print(
+                f"❌ {path} repository '{repo}' does not match prefix {REPO_PREFIX}"
+            )
+            valid = False
+        if not (folder / ".git").exists():
+            print(f"❌ {path} has no initialised git repository")
+            valid = False
+            continue
+        result = git("remote", "get-url", "origin", cwd=folder)
+        origin = result.stdout.strip() if result.returncode == 0 else None
+        if origin != repo:
+            print(f"❌ {path} remote mismatch (got '{origin}', expected '{repo}')")
             valid = False
         else:
             print(f"✅ {path} repository OK")
@@ -150,11 +189,12 @@ def main() -> None:
     os.chdir(root)
     pathspec = load_gitignore()
     metadata_files = list(find_metadata_files(root, pathspec))
+    project_dirs = {p.parent.resolve() for p in metadata_files if p.name == "project.json"}
 
     if args.command == "walk":
         for p in metadata_files:
             try:
-                add_nested_components(p, metadata_files)
+                add_nested_components(p, metadata_files, project_dirs)
             except ValueError as e:
                 print(f"Skipping due to validation: {e}")
     elif args.command == "update":
