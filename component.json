@@ -1,0 +1,9 @@
+{
+  "tier": "Tier 2",
+  "type": "Component",
+  "code": "scrp-0001",
+  "name": "pyrepomanager",
+  "description": "Manages github submodules and repositories using generic component.json and project.json files in target repositories.",
+  "components": [],
+  "repo": "https://github.com/Kindred-Systems/scrp-0001"
+}
