@@ -1,0 +1,38 @@
+*env
+*env/**
+
+# Ignore Python bytecode files
+__pycache__/
+*.py[cod]
+# Ignore Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+# Ignore virtual environment directories
+venv/
+# Ignore Python distribution files
+dist/
+# Ignore build directories
+build/
+# Ignore coverage reports
+.coverage
+# Ignore logs
+*.log
+# Ignore IDE specific files
+.idea/
+# Ignore macOS specific files
+.DS_Store
+# Ignore Windows specific files
+Thumbs.db
+# Ignore Python egg files
+*.egg
+# Ignore Python egg-info directories
+*.egg-info/
+# Ignore pipenv files
+Pipfile.lock
+# Ignore pip cache
+pip-log.txt
+# Ignore test output files
+test_output.txt
+# Ignore configuration files
+*.cfg
+# Ignore environment variable files
+.vscode/

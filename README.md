@@ -6,10 +6,12 @@ For now, they exist as run-as-needed python scripts and a virtual environment is
 
 ## repo_tool.py
 
-`repo_tool.py` combines the earlier `auto_git.py` and `metadata_walker.py` utilities. It provides a single command line interface to:
+`repo_tool.py` combines the earlier automation utilities into a single entrypoint for repository management. It can:
 
-- validate `component.json` files contain a valid `repo` field
+- validate `project.json` and `component.json` files contain a valid `repo` field
 - embed nested component metadata (`walk` command)
-- optionally initialise new repositories (`update` command)
+- create missing repositories and initialise them (`update` command)
+
+The `update` command accepts `--create-repos` to automatically create any missing repositories without prompting and `--non-interactive` to suppress all user input.
 
 Run `python repo_tool.py --help` for usage information.
